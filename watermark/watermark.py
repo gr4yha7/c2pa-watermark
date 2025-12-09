@@ -4,11 +4,15 @@ import base64
 import io
 import random
 import hashlib
+import logging
 from PIL import Image
 from trustmark import TrustMark
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)s %(levelname)s %(message)s')
 
 TM_SCHEMA_CODE=TrustMark.Encoding.BCH_4
+tm = TrustMark(verbose=True, model_type='Q', encoding_type=TM_SCHEMA_CODE)
+bitlen = tm.schemaCapacity()
 
 def uuidgen(bitlen):
     id = ''.join(random.choice('01') for _ in range(bitlen))
@@ -54,11 +58,10 @@ def string_to_binary(watermark_id: str, bitlen: int) -> str:
 
 def embed_watermark(base64_image: str, watermarkID, tm):
     decoded_image_bytes = base64.b64decode(base64_image)
-    print(f"Decoded image bytes: {len(decoded_image_bytes)}")
     image_stream = io.BytesIO(decoded_image_bytes)
     try:
         cover = Image.open(image_stream)
-        print(f"Image information: {cover.format}, {cover.size}, {cover.mode}")
+        # logging.info("Image information: %s, %s, %s", cover.format, cover.size, cover.mode)
         rgb=cover.convert('RGB')  
         has_alpha=cover.mode== 'RGBA'
         if (has_alpha):
@@ -75,11 +78,9 @@ def embed_watermark(base64_image: str, watermarkID, tm):
         image_format = cover.format or 'JPG'
         encoded.save(output_stream, format=image_format, **not_none_params)
         base64_encoded_image = base64.b64encode(output_stream.getvalue()).decode('utf-8')
-        # print(f"Base64 encoded image bytes: {output_stream.getvalue()}")
-        print(f"Base64 encoded image: {len(base64_encoded_image)}")
         return base64_encoded_image
     except Exception as e:
-        print(f"Error opening image: {e}")
+        logging.exception("Error opening image: %s", e)
         return None
     finally:
         image_stream.close()
@@ -98,57 +99,69 @@ def watermark_image(base64_image: str, watermark_id: str = None):
     Returns:
         Base64 encoded string of the watermarked image, or None if watermarking failed
     """
-    tm = TrustMark(verbose=True, model_type='Q', encoding_type=TM_SCHEMA_CODE)
-    bitlen = tm.schemaCapacity()
-    
-    # Use user-provided watermark ID or generate a random one
-    if watermark_id:
-        print(f"Converting watermark ID '{watermark_id}' to binary format...")
-        id = string_to_binary(watermark_id, bitlen)
-        print(f"Using user-provided watermark ID (binary length: {len(id)} bits)")
-    else:
-        id = uuidgen(bitlen)  # Generate a proper binary string
-        print(f"Generated random watermark ID (binary length: {len(id)} bits)")
-    
-    # watermark the image using embed_watermark
-    wm_base64_img = embed_watermark(base64_image, id, tm)
-    if wm_base64_img is None:
-        print(f"Failed to watermark image: embed_watermark returned None")
+    is_watermarked = is_watermarked_image(base64_image)
+    if is_watermarked:
+        logging.error("Image is already watermarked")
         return None
-    # if verify_watermark(wm_base64_img, watermark_id):
-    #   return wm_base64_img
-    # else:
-    #   print(f"Failed to verify watermark")
-    #   return None
+    else:
+    # Use user-provided watermark ID or generate a random one
+        if watermark_id:
+            # logging.info("Converting watermark ID '%s' to binary format...", watermark_id)
+            id = string_to_binary(watermark_id, bitlen)
+            # logging.info("Using user-provided watermark ID (binary length: %d bits)", len(id))
+        else:
+            id = uuidgen(bitlen)  # Generate a proper binary string
+            # logging.info("Generated random watermark ID (binary length: %d bits)", len(id))
+        
+        # watermark the image using embed_watermark
+        wm_base64_img = embed_watermark(base64_image, id, tm)
+        if wm_base64_img is None:
+            logging.error("Failed to watermark image: embed_watermark returned None")
+            return None
+        return wm_base64_img
+
+def is_watermarked_image(base64_img_str) -> bool:
+    decoded_image_bytes = base64.b64decode(base64_img_str)
+    image_stream = io.BytesIO(decoded_image_bytes)
+    try:
+        img = Image.open(image_stream)
+        stego = img.convert('RGB')
+        wm_id, wm_present, wm_schema = tm.decode(stego, 'binary')
+        return wm_present
+    except Exception as e:
+        logging.exception('Error verifying if image is already watermarked: %s', e)
+        return False
+    finally:
+        image_stream.close()
+
 
 def verify_watermark(wm_base64_img_str: str, wm_hash: str):
   if wm_base64_img_str is None:
-      print('Error: Cannot verify watermark - image is None')
+      logging.error('Error: Cannot verify watermark - image is None')
       return False
   try:
-    tm = TrustMark(verbose=True, model_type='Q', encoding_type=TM_SCHEMA_CODE)
-    bitlen = tm.schemaCapacity()
     id = string_to_binary(wm_hash, bitlen)
     decoded_image_bytes = base64.b64decode(wm_base64_img_str)
-    # print(f"Decoded image bytes: {len(decoded_image_bytes)}")
     image_stream = io.BytesIO(decoded_image_bytes)
     img = Image.open(image_stream)
     stego = img.convert('RGB')
     wm_id, wm_present, wm_schema = tm.decode(stego, 'binary')
     if wm_present:
-      print('Watermark detected in image')
+      logging.info('Watermark detected in image')
       if wm_id==id:
-          print('Watermark is correct')
-          print(f'Watermark ID: {id}')
+          logging.info('Watermark is correct')
+          logging.info('Watermark ID: %s', id)
       else:
-          print('Watermark does not match!')
-          print(f'Expected ID: {id}')
-          print(f'Found ID: {wm_id}')
+          logging.info('Watermark does not match!')
+          logging.debug('Expected ID: %s', id)
+          logging.debug('Found ID: %s', wm_id)
+          return False
     else:
-        print('No watermark detected!') 
+        logging.info('No watermark detected!')
+        return False
     return (wm_present and wm_id==id)
   except Exception as e:
-    print(f'Error verifying watermark: {e}')
+    logging.exception('Error verifying watermark: %s', e)
     return False
 
 
@@ -177,11 +190,22 @@ def verify_watermark(wm_base64_img_str: str, wm_hash: str):
   
 #   # Example: Use a user-provided watermark ID
 #   user_watermark_id = "r4nd0ma55"  # You can change this to any alphanumeric string
+#   user_watermark_id2 = "r4nd0ma56"  # You can change this to any alphanumeric string
 #   print(f"Watermarking with user-provided ID: '{user_watermark_id}'")
-#   watermarked_image_base64 = watermark_image(base64_image_str, watermark_id=user_watermark_id)
+#   watermarked_image1 = watermark_image(base64_image=base64_image_str, watermark_id=user_watermark_id)
+# #   print(f'wm_img: {watermarked_image_base64}')
+#   watermarked_image2 = watermark_image(base64_image=watermarked_image1, watermark_id=user_watermark_id2)
+
+#   print(f'watermark matched: {watermarked_image1 == watermarked_image2}')
+
+
+#   is_verified = verify_watermark(watermarked_image1, user_watermark_id)
+#   is_verified2 = verify_watermark(watermarked_image2, user_watermark_id)
+#   print(f'watermark verified: {is_verified}')
+#   print(f'watermark verified2: {is_verified2}')
   
-#   # Example: Use random watermark ID (if watermark_id is None)
-#   # watermarked_image_base64 = watermark_image(base64_image_str)
+# #   Example: Use random watermark ID (if watermark_id is None)
+#   watermarked_image_base64 = watermark_image(base64_image_str)
 
 # if __name__ == "__main__":
 #     main()
