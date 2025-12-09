@@ -1,3 +1,4 @@
 fastapi[all]
 pydantic==2.12.5
 Pillow==12.0.0
+trustmark==0.9.0
