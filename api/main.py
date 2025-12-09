@@ -56,11 +56,10 @@ async def verify_watermark_endpoint(
     base64_image = image.base64_image
     watermark_hash = image.watermark_hash
     verified = verify_watermark(base64_image, watermark_hash)
-    return JSONResponse(status_code=status.HTTP_200_OK, content={
-        "success": True,
-        "message": "Image verified successfully",
-        "verified": verified
-    })
+    if verified:
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"success": True, "message": "Image verified successfully"})
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Image verification failed")
 
 
 
