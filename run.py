@@ -20,7 +20,7 @@ if __name__ == "__main__":
   port = int(os.getenv("PORT", 8000))
 
   uvicorn.run(
-    "api.main:app",
+    "api.server:app",
     host=host,
     port=port,
     reload=os.getenv("ENV", "development") == "development"
