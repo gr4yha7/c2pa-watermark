@@ -4,10 +4,10 @@ version = "1.0.0"
 requires-python = ">=3.10"
 description = "FastAPI server for watermarking images & verifying watermarked images"
 dependencies = [
-  "fastapi=0.124.0",
-  "pydantic=2.12.5",
-  "Pillow=12.0.0",
-  "trustmark=0.9.0",
+  "fastapi[all]",
+  "pydantic",
+  "Pillow",
+  "trustmark",
 ]
 readme = "README.md"
 license = "MIT"
