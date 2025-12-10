@@ -1,2 +1,16 @@
+[project]
+name = "fastapi-watermark"
+version = "1.0.0"
+requires-python = ">=3.10"
+description = "FastAPI server for watermarking images & verifying watermarked images"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICEN[CS]E.*"]
+keywords = ["watermark", "image watermark", "trustmark", "image watermaking", "python", "FastAPI"]
+
+[project.urls]
+Homepage = "https://github.com/gr4yha7/c2pa-watermark.git"
+Repository = "https://github.com/gr4yha7/c2pa-watermark.git"
+
 [project.scripts]
 app = "api.server:app"
